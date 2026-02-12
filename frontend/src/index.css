@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@theme {
+  --color-slate-950: #020617;
+  --color-emerald-950: #022c22;
+  --color-red-950: #450a0a;
+}

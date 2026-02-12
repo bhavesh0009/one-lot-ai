@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Logs
+*.log
+logs/
+
+# Temp files
+temp_instruments.json
+instrument_head.json
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Build output
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+frontend_design_mock.js
+
+# Gemini AI artifacts
+.gemini/
