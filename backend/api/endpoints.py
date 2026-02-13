@@ -9,6 +9,8 @@ from services.angel_one import angel_service
 from services.instrument_service import instrument_service
 from services.greeks import compute_greeks, parse_expiry_to_T
 from services.news_service import news_service
+from services.trade_advisor import trade_advisor
+from services.llm_usage import llm_usage_tracker
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -331,4 +333,32 @@ def get_stock_news(ticker: str):
     """
     ticker = ticker.upper()
     return news_service.fetch_news(query=ticker, type="stock")
+
+@router.get("/stock/{ticker}/recommendation")
+def get_trade_recommendation(ticker: str):
+    """
+    Get AI-powered trade recommendation using Gemini.
+    Analyzes technicals, option chain with Greeks, and news to suggest a trade.
+    """
+    ticker = ticker.upper()
+    try:
+        result = trade_advisor.analyze(ticker)
+        if result.get("error") and not result.get("recommendation"):
+            raise HTTPException(status_code=500, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting trade recommendation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/llm/usage")
+def get_llm_usage_summary():
+    """Get LLM token usage summary (total calls, tokens, cost)."""
+    return llm_usage_tracker.get_usage_summary()
+
+@router.get("/llm/usage/recent")
+def get_llm_recent_usage(limit: int = Query(20, ge=1, le=100)):
+    """Get recent LLM usage records."""
+    return llm_usage_tracker.get_recent_usage(limit)
 

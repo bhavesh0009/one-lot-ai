@@ -1,5 +1,6 @@
 
 import os
+import time
 import logging
 from google import genai
 from google.genai import types
@@ -11,6 +12,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 class NewsService:
     def __init__(self):
@@ -54,12 +56,21 @@ class NewsService:
                 temperature=0.3
             )
 
-            # Use gemini-2.5-flash as verified
+            start_time = time.time()
             response = self.client.models.generate_content(
-                model="gemini-2.5-flash", 
+                model=GEMINI_MODEL,
                 contents=prompt,
                 config=config
             )
+            latency_ms = int((time.time() - start_time) * 1000)
+
+            # Track usage
+            try:
+                from services.llm_usage import llm_usage_tracker
+                ticker = query if type == "stock" else None
+                llm_usage_tracker.log_usage(GEMINI_MODEL, "news_service", ticker, response, latency_ms)
+            except Exception as e:
+                logger.warning(f"Failed to track LLM usage: {e}")
 
             return self._process_response(response)
 

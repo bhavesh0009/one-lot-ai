@@ -44,3 +44,5 @@ frontend_design_mock.js
 
 # Gemini AI artifacts
 .gemini/
+
+prompts.md
