@@ -107,12 +107,19 @@ def get_stock_info(ticker: str):
                  previous_close = latest_data.get('close', 0)
                  latest_data['prev_close'] = previous_close # Shift current close to prev
                  latest_data['close'] = live_price
-                 # Note: High/Low/Open won't be live unless we fetch full market data
+        
+        # Compute change and % change (close vs prev_close)
+        close = float(latest_data.get('close', 0))
+        prev_close = float(latest_data.get('prev_close', 0))
+        change = round(close - prev_close, 2) if prev_close else 0
+        change_pct = round((change / prev_close) * 100, 2) if prev_close else 0
         
         return {
             "basic": basic_data,
             "ban_status": recent_ban,
-            "latest_ohlcv": latest_data
+            "latest_ohlcv": latest_data,
+            "change": change,
+            "change_pct": change_pct
         }
     finally:
         conn.close()
@@ -146,13 +153,14 @@ def get_stock_history(ticker: str, days: int = Query(365, description="Number of
 @router.get("/stock/{ticker}/technicals")
 def get_stock_technicals(ticker: str):
     """
-    Calculate and return technical indicators.
+    Calculate and return technical indicators (based on yesterday's data).
+    Includes: RSI, MACD, Supertrend, 52W High/Low distance, SMAs, Delivery %
     """
     ticker = ticker.upper()
     conn = get_db_connection()
     try:
         query = """
-            SELECT date, open, high, low, close, volume 
+            SELECT date, open, high, low, close, volume, delivery_pct
             FROM daily_ohlcv 
             WHERE symbol = ?
             ORDER BY date ASC
@@ -162,31 +170,61 @@ def get_stock_technicals(ticker: str):
         if df.empty:
             raise HTTPException(status_code=404, detail="Not enough data for technicals")
 
+        # --- pandas_ta indicators ---
         # RSI 14
         df.ta.rsi(length=14, append=True)
         # MACD
         df.ta.macd(append=True)
-        # Bollinger Bands
-        df.ta.bbands(append=True)
         # Supertrend
         df.ta.supertrend(append=True)
+        # SMA 20, 50, 200
+        df.ta.sma(length=20, append=True)
+        df.ta.sma(length=50, append=True)
+        df.ta.sma(length=200, append=True)
         
         latest = df.iloc[-1]
+        close = float(latest['close'])
+        
+        # --- 52-Week High/Low (252 trading days) ---
+        lookback = min(252, len(df))
+        recent = df.tail(lookback)
+        high_52w = float(recent['high'].max())
+        low_52w = float(recent['low'].min())
+        dist_52w_high = round(((close - high_52w) / high_52w) * 100, 2) if high_52w else 0
+        dist_52w_low = round(((close - low_52w) / low_52w) * 100, 2) if low_52w else 0
+        
+        # --- Delivery % ---
+        delivery_pct = float(latest.get('delivery_pct', 0) or 0)
+        # 20-day average delivery %
+        last_20 = df.tail(20)['delivery_pct'].dropna()
+        avg_delivery_pct = round(float(last_20.mean()), 2) if len(last_20) > 0 else 0
         
         technicals = {
+            # Momentum
             "rsi": latest.get("RSI_14"),
             "macd": latest.get("MACD_12_26_9"), 
             "macd_signal": latest.get("MACDs_12_26_9"), 
             "macd_hist": latest.get("MACDh_12_26_9"), 
-            "bb_upper": latest.get("BBU_5_2.0"), 
-            "close": latest["close"]
+            "close": close,
+            # Trend
+            "sma_20": latest.get("SMA_20"),
+            "sma_50": latest.get("SMA_50"),
+            "sma_200": latest.get("SMA_200"),
+            # 52-Week
+            "high_52w": high_52w,
+            "low_52w": low_52w,
+            "dist_52w_high": dist_52w_high,
+            "dist_52w_low": dist_52w_low,
+            # Volume
+            "delivery_pct": delivery_pct,
+            "avg_delivery_pct_20": avg_delivery_pct,
         }
         
         st_cols = [c for c in df.columns if c.startswith("SUPERT_")]
         if st_cols:
              technicals["supertrend"] = latest[st_cols[0]]
         
-        technicals = {k: (None if pd.isna(v) else v) for k, v in technicals.items()}
+        technicals = {k: (None if pd.isna(v) else round(float(v), 2) if isinstance(v, (float, int)) and v is not None else v) for k, v in technicals.items()}
         
         return technicals
         

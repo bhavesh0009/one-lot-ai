@@ -96,11 +96,15 @@ export default function App() {
                 </div>
                 <div className="flex items-end gap-3 mb-2">
                   <span className="text-4xl font-bold text-white">₹{data.latest_ohlcv.close}</span>
-                  {/* Calculate change if possible, or omit for now */}
-                  {data.latest_ohlcv.close > data.latest_ohlcv.open ? (
-                    <span className="text-emerald-400 text-sm font-medium mb-1">+{(data.latest_ohlcv.close - data.latest_ohlcv.open).toFixed(2)}</span>
-                  ) : (
-                    <span className="text-red-400 text-sm font-medium mb-1">{(data.latest_ohlcv.close - data.latest_ohlcv.open).toFixed(2)}</span>
+                  {data.change !== undefined && (
+                    <div className="flex items-center gap-1 mb-1">
+                      <span className={`text-sm font-medium ${data.change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {data.change >= 0 ? '+' : ''}{data.change}
+                      </span>
+                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${data.change_pct >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                        {data.change_pct >= 0 ? '+' : ''}{data.change_pct}%
+                      </span>
+                    </div>
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-800">
@@ -120,34 +124,118 @@ export default function App() {
                 <h3 className="text-slate-400 font-medium mb-4 flex items-center gap-2">
                   <Activity className="w-4 h-4" /> Technical Indicators
                 </h3>
-                <div className="space-y-4">
-                  {data.technicals && (
-                    <>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-slate-500">RSI (14)</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-indigo-500" style={{ width: `${data.technicals.rsi}%` }}></div>
-                          </div>
-                          <span className="text-sm font-mono text-slate-300">{data.technicals.rsi?.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-slate-500">MACD</span>
-                        <span className={`text-sm font-medium ${data.technicals.macd > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {data.technicals.macd?.toFixed(2)}
-                        </span>
-                      </div>
-                      {/* Add Supertrend if available */}
-                      {data.technicals.supertrend && (
+                {data.technicals && (
+                  <div className="space-y-5">
+                    {/* Momentum */}
+                    <div>
+                      <div className="text-xs text-slate-600 uppercase font-semibold mb-2 tracking-wider">Momentum</div>
+                      <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-slate-500">Supertrend</span>
-                          <span className="text-sm font-medium text-emerald-400">{data.technicals.supertrend.toFixed(2)}</span>
+                          <span className="text-sm text-slate-500">RSI (14)</span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(data.technicals.rsi || 0, 100)}%` }}></div>
+                            </div>
+                            <span className={`text-sm font-mono ${data.technicals.rsi > 70 ? 'text-red-400' : data.technicals.rsi < 30 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                              {data.technicals.rsi?.toFixed(1)}
+                            </span>
+                          </div>
                         </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-slate-500">MACD</span>
+                          <span className={`text-sm font-mono ${data.technicals.macd > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {data.technicals.macd?.toFixed(2)}
+                          </span>
+                        </div>
+                        {data.technicals.supertrend && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-slate-500">Supertrend</span>
+                            <span className={`text-sm font-mono ${data.latest_ohlcv.close > data.technicals.supertrend ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {data.technicals.supertrend?.toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Trend - SMAs */}
+                    <div className="border-t border-slate-800 pt-4">
+                      <div className="text-xs text-slate-600 uppercase font-semibold mb-2 tracking-wider">Moving Averages</div>
+                      <div className="space-y-3">
+                        {[{ label: 'SMA 20', key: 'sma_20' }, { label: 'SMA 50', key: 'sma_50' }, { label: 'SMA 200', key: 'sma_200' }].map(({ label, key }) => {
+                          const sma = data.technicals[key];
+                          const above = sma ? data.latest_ohlcv.close > sma : null;
+                          return sma ? (
+                            <div key={key} className="flex justify-between items-center">
+                              <span className="text-sm text-slate-500">{label}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-mono text-slate-300">₹{sma.toFixed(1)}</span>
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${above ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                  {above ? '▲' : '▼'}
+                                </span>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 52-Week */}
+                    <div className="border-t border-slate-800 pt-4">
+                      <div className="text-xs text-slate-600 uppercase font-semibold mb-2 tracking-wider">52-Week Range</div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-slate-500">From 52W High</span>
+                          <span className={`text-sm font-mono ${data.technicals.dist_52w_high >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {data.technicals.dist_52w_high?.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-slate-500">From 52W Low</span>
+                          <span className={`text-sm font-mono ${data.technicals.dist_52w_low >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            +{data.technicals.dist_52w_low?.toFixed(1)}%
+                          </span>
+                        </div>
+                        {/* Visual range bar */}
+                        {data.technicals.low_52w && data.technicals.high_52w && (
+                          <div>
+                            <div className="flex justify-between text-[10px] text-slate-600 mb-1">
+                              <span>₹{data.technicals.low_52w}</span>
+                              <span>₹{data.technicals.high_52w}</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-800 rounded-full relative">
+                              <div
+                                className="absolute h-3 w-1 bg-cyan-400 rounded-full top-1/2 -translate-y-1/2"
+                                style={{ left: `${Math.min(Math.max(((data.latest_ohlcv.close - data.technicals.low_52w) / (data.technicals.high_52w - data.technicals.low_52w)) * 100, 0), 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Volume */}
+                    <div className="border-t border-slate-800 pt-4">
+                      <div className="text-xs text-slate-600 uppercase font-semibold mb-2 tracking-wider">Volume</div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-slate-500">Delivery %</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-mono text-slate-300">{data.technicals.delivery_pct?.toFixed(1)}%</span>
+                            {data.technicals.avg_delivery_pct_20 && (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${data.technicals.delivery_pct > data.technicals.avg_delivery_pct_20
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-amber-500/20 text-amber-400'
+                                }`}>
+                                avg {data.technicals.avg_delivery_pct_20?.toFixed(1)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -44,6 +44,8 @@ export const useStockData = () => {
         basic: info.basic,
         banStatus: info.ban_status,
         latest_ohlcv: info.latest_ohlcv,
+        change: info.change,
+        change_pct: info.change_pct,
         history,
         technicals,
         chain: chainData,
