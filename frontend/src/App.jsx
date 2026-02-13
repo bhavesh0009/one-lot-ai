@@ -1,16 +1,49 @@
 import React, { useState } from 'react';
 import { Brain, Clock, RefreshCw, ShieldAlert, CheckCircle2, Activity, Target, Newspaper } from 'lucide-react';
 import { useStockData } from './hooks/useStockData';
+import { fetchMarketNews } from './libs/api';
 import TradeCard from './components/TradeCard';
 import StockChart from './components/StockChart';
 import OptionChain from './components/OptionChain';
 import TickerSearch from './components/TickerSearch';
+import NewsCard from './components/NewsCard';
 
 export default function App() {
   const { data, loading, error, logs, loadStockData } = useStockData();
 
   const handleSelect = (symbol) => {
     loadStockData(symbol);
+  };
+
+  const [marketNews, setMarketNews] = useState(null);
+  const [marketNewsLoading, setMarketNewsLoading] = useState(false);
+
+  React.useEffect(() => {
+    const loadMarketNews = async () => {
+      setMarketNewsLoading(true);
+      try {
+        const news = await fetchMarketNews();
+        setMarketNews(news);
+      } catch (e) {
+        console.error("Market news failed", e);
+        setMarketNews({ error: "Failed to load market news" });
+      } finally {
+        setMarketNewsLoading(false);
+      }
+    };
+    loadMarketNews();
+  }, []);
+
+  const refreshMarketNews = async () => {
+    setMarketNewsLoading(true);
+    try {
+      const news = await fetchMarketNews();
+      setMarketNews(news);
+    } catch (e) {
+      setMarketNews({ error: "Failed to refresh" });
+    } finally {
+      setMarketNewsLoading(false);
+    }
   };
 
   return (
@@ -224,8 +257,8 @@ export default function App() {
                             <span className="text-sm font-mono text-slate-300">{data.technicals.delivery_pct?.toFixed(1)}%</span>
                             {data.technicals.avg_delivery_pct_20 && (
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${data.technicals.delivery_pct > data.technicals.avg_delivery_pct_20
-                                  ? 'bg-emerald-500/20 text-emerald-400'
-                                  : 'bg-amber-500/20 text-amber-400'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-amber-500/20 text-amber-400'
                                 }`}>
                                 avg {data.technicals.avg_delivery_pct_20?.toFixed(1)}%
                               </span>
@@ -237,6 +270,15 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+
+              {/* Market News Card (Left Column) */}
+              <NewsCard
+                title="Market News"
+                news={marketNews}
+                loading={marketNewsLoading}
+                onRefresh={refreshMarketNews}
+              />
             </div>
 
             {/* Middle Column: Visuals & Trade Logic */}
@@ -260,22 +302,18 @@ export default function App() {
                 data={data.recommendation}
               />
 
-              {/* LLM Reasoning (Placeholder) */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                <h3 className="text-slate-400 font-medium mb-4 flex items-center gap-2">
-                  <Target className="w-4 h-4" /> AI Reasoning
-                </h3>
-                <div className="text-sm text-slate-300 space-y-3 leading-relaxed">
-                  Analysis based on latest data... (LLM integration pending in next phase).
-                  <br />
-                  RSI is {data.technicals.rsi?.toFixed(2)}, indicating {data.technicals.rsi > 70 ? 'Overbought' : data.technicals.rsi < 30 ? 'Oversold' : 'Neutral'} territory.
-                </div>
-              </div>
+              {/* Stock News / AI Reasoning */}
+              <NewsCard
+                title={`AI Analysis: ${data.basic.symbol}`}
+                news={data.news || { text: "Loading specific news..." }}
+                loading={loading}
+              />
             </div>
 
           </div>
-        )}
-      </main>
-    </div>
+        )
+        }
+      </main >
+    </div >
   );
 }

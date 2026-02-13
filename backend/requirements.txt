@@ -10,3 +10,5 @@ httpx
 smartapi-python
 pyotp
 python-dotenv
+google-genai
+GoogleNews

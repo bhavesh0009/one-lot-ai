@@ -200,4 +200,9 @@ class AngelOneService:
              return []
 
 # Singleton
-# angel_service = AngelOneService() # Don't instantiate globally to avoid run-time errors if env missing during import
+# Singleton
+try:
+    angel_service = AngelOneService()
+except Exception as e:
+    logger.error(f"AngelOneService init failed: {e}")
+    angel_service = None

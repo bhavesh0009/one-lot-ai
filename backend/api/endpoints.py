@@ -1,24 +1,20 @@
+
 from fastapi import APIRouter, HTTPException, Query
 import pandas as pd
 import pandas_ta as ta
 from database import get_db_connection
 from datetime import date, timedelta
 import logging
-from services.angel_one import AngelOneService
-from services.instrument_service import InstrumentService
+from services.angel_one import angel_service
+from services.instrument_service import instrument_service
 from services.greeks import compute_greeks, parse_expiry_to_T
+from services.news_service import news_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Initialize services
-# Note: In production, these should be dependencies injected or singletons managed by app state
-try:
-    instrument_service = InstrumentService()
-    angel_service = AngelOneService()
-except Exception as e:
-    logger.error(f"Failed to initialize services: {e}")
-    angel_service = None # Fallback or error state
+# Services are imported as singletons
+
 
 @router.get("/search")
 def search_stocks(q: str = Query("", min_length=1)):
@@ -320,4 +316,19 @@ def get_option_chain(ticker: str):
     except Exception as e:
         logger.error(f"Error building option chain: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/news/market")
+def get_market_news():
+    """
+    Get general market news using Gemini Grounded Search.
+    """
+    return news_service.fetch_news(query="market", type="market")
+
+@router.get("/stock/{ticker}/news")
+def get_stock_news(ticker: str):
+    """
+    Get stock-specific news using Gemini Grounded Search.
+    """
+    ticker = ticker.upper()
+    return news_service.fetch_news(query=ticker, type="stock")
 

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { fetchStockInfo, fetchStockHistory, fetchStockTechnicals, fetchStockOptionChain } from '../libs/api';
+import { fetchStockInfo, fetchStockHistory, fetchStockTechnicals, fetchStockOptionChain, fetchStockNews } from '../libs/api';
 
 export const useStockData = () => {
   const [data, setData] = useState(null);
@@ -40,6 +40,16 @@ export const useStockData = () => {
         addLog("Option Chain fetch failed (Angel One unavailable?).");
       }
 
+      addLog("Fetching Stock News...");
+      let newsData = null;
+      try {
+        newsData = await fetchStockNews(ticker);
+        addLog("Stock News Loaded.");
+      } catch (e) {
+        console.warn("Stock news fetch failed", e);
+        addLog("Stock news fetch failed.");
+      }
+
       setData({
         basic: info.basic,
         banStatus: info.ban_status,
@@ -49,6 +59,7 @@ export const useStockData = () => {
         history,
         technicals,
         chain: chainData,
+        news: newsData,
         // Mocking trade recommendation for now as per plan
         recommendation: {
           ticker: ticker,
