@@ -8,7 +8,7 @@ const OptionChain = ({ data }) => {
     const { underlying_price, expiry, chain } = data;
 
     const isATM = (strike) => Math.abs(strike - underlying_price) < (underlying_price * 0.005);
-    const fmt = (val, dec = 2) => val && val > 0 ? val.toFixed(dec) : '-';
+    const fmt = (val, dec = 2) => (val !== undefined && val !== null && val !== 0) ? val.toFixed(dec) : '-';
     const fmtOI = (val) => {
         if (!val || val === 0) return '-';
         if (val >= 100000) return (val / 100000).toFixed(1) + 'L';

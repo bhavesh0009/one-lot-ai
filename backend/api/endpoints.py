@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import logging
 from services.angel_one import AngelOneService
 from services.instrument_service import InstrumentService
+from services.greeks import compute_greeks, parse_expiry_to_T
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -229,10 +230,10 @@ def get_option_chain(ticker: str):
         all_tokens = [str(op['token']) for op in options]
         market_data = angel_service.get_market_data_batch(all_tokens, "NFO")
 
-        # 4. Fetch Greeks (1 separate API call)
-        greeks_map = angel_service.get_option_greeks(ticker, expiry) if expiry else {}
+        # 4. Compute time to expiry for Greeks calculation
+        T = parse_expiry_to_T(expiry) if expiry else 0
 
-        # 5. Build chain — group CE/PE by strike
+        # 5. Build chain — group CE/PE by strike, compute Greeks locally
         grouped = {}
         for op in options:
             opt_type = "CE" if op['symbol'].endswith("CE") else "PE"
@@ -241,27 +242,31 @@ def get_option_chain(ticker: str):
             
             # Get market data for this token
             md = market_data.get(token_str, {})
+            ltp = md.get('ltp', 0)
             
-            # Get Greeks for this strike/type
-            # Greeks API may use rupees or paise for strike — try both
-            greeks = greeks_map.get((op['strike'], opt_type), {})
-            if not greeks:
-                greeks = greeks_map.get((strike_rupees, opt_type), {})
+            # Compute Greeks locally using Black-Scholes
+            greeks = compute_greeks(
+                S=spot_price,
+                K=strike_rupees,
+                T=T,
+                option_type=opt_type,
+                option_price=ltp
+            )
             
             if strike_rupees not in grouped:
                 grouped[strike_rupees] = {"strike": strike_rupees}
             
             prefix = "ce" if opt_type == "CE" else "pe"
-            grouped[strike_rupees][f'{prefix}Price'] = md.get('ltp', 0)
+            grouped[strike_rupees][f'{prefix}Price'] = ltp
             grouped[strike_rupees][f'{prefix}OI'] = md.get('oi', 0)
             grouped[strike_rupees][f'{prefix}Volume'] = md.get('volume', 0)
             grouped[strike_rupees][f'{prefix}Token'] = token_str
             grouped[strike_rupees][f'{prefix}Symbol'] = op['symbol']
-            grouped[strike_rupees][f'{prefix}IV'] = greeks.get('iv', 0)
-            grouped[strike_rupees][f'{prefix}Delta'] = greeks.get('delta', 0)
-            grouped[strike_rupees][f'{prefix}Gamma'] = greeks.get('gamma', 0)
-            grouped[strike_rupees][f'{prefix}Theta'] = greeks.get('theta', 0)
-            grouped[strike_rupees][f'{prefix}Vega'] = greeks.get('vega', 0)
+            grouped[strike_rupees][f'{prefix}IV'] = greeks['iv']
+            grouped[strike_rupees][f'{prefix}Delta'] = greeks['delta']
+            grouped[strike_rupees][f'{prefix}Gamma'] = greeks['gamma']
+            grouped[strike_rupees][f'{prefix}Theta'] = greeks['theta']
+            grouped[strike_rupees][f'{prefix}Vega'] = greeks['vega']
                 
         # Sorted by strike
         final_chain = sorted(grouped.values(), key=lambda x: x['strike'])
