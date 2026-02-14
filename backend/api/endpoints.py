@@ -362,3 +362,13 @@ def get_llm_recent_usage(limit: int = Query(20, ge=1, le=100)):
     """Get recent LLM usage records."""
     return llm_usage_tracker.get_recent_usage(limit)
 
+@router.get("/recommendations")
+def get_all_recommendations(limit: int = Query(50, ge=1, le=200)):
+    """Get all past AI recommendations for forward testing."""
+    return llm_usage_tracker.get_recommendations(limit=limit)
+
+@router.get("/stock/{ticker}/recommendations")
+def get_stock_recommendations(ticker: str, limit: int = Query(50, ge=1, le=200)):
+    """Get past AI recommendations for a specific stock."""
+    return llm_usage_tracker.get_recommendations(ticker=ticker.upper(), limit=limit)
+

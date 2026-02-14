@@ -11,7 +11,8 @@ const TradeCard = ({ data, loading }) => {
         );
     }
 
-    if (!data || data.error) return null;
+    if (!data) return null;
+    if (data.error && !data.recommendation) return null;
 
     const rec = data.recommendation;
     if (!rec) return null;
@@ -20,25 +21,42 @@ const TradeCard = ({ data, loading }) => {
     const isBearish = rec.direction === 'BEARISH';
 
     const DirectionIcon = isBullish ? TrendingUp : isBearish ? TrendingDown : MinusCircle;
-    const dirColor = isBullish ? 'emerald' : isBearish ? 'red' : 'slate';
 
-    const confidenceColor = rec.confidence >= 70 ? 'emerald' : rec.confidence >= 50 ? 'amber' : 'red';
+    // Tailwind can't detect dynamic classes like `bg-${color}-500`.
+    // Use full class names so Tailwind includes them in the build.
+    const borderClass = isBullish
+        ? 'bg-emerald-950/30 border-emerald-500/50'
+        : isBearish
+            ? 'bg-red-950/30 border-red-500/50'
+            : 'bg-slate-900 border-slate-700';
+
+    const dirTextClass = isBullish
+        ? 'text-emerald-400'
+        : isBearish
+            ? 'text-red-400'
+            : 'text-slate-300';
+
+    const confidenceBadge = rec.confidence >= 70
+        ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+        : rec.confidence >= 50
+            ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
+            : 'bg-red-500/20 border-red-500/30 text-red-400';
 
     return (
-        <div className={`relative overflow-hidden rounded-xl border p-6 bg-${dirColor}-950/30 border-${dirColor}-500/50`}>
+        <div className={`relative overflow-hidden rounded-xl border p-6 ${borderClass}`}>
             {/* Header */}
             <div className="flex justify-between items-start mb-5">
                 <div>
                     <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-1">AI Recommendation</h3>
                     <div className="flex items-center gap-2">
-                        <DirectionIcon className={`w-7 h-7 text-${dirColor}-400`} />
-                        <span className={`text-2xl font-bold text-${dirColor}-400`}>
+                        <DirectionIcon className={`w-7 h-7 ${dirTextClass}`} />
+                        <span className={`text-2xl font-bold ${dirTextClass}`}>
                             {rec.direction} — {rec.strategy}
                         </span>
                     </div>
                 </div>
-                <div className={`bg-${confidenceColor}-500/20 border border-${confidenceColor}-500/30 px-3 py-1.5 rounded-full`}>
-                    <span className={`text-sm font-bold text-${confidenceColor}-400`}>
+                <div className={`border px-3 py-1.5 rounded-full ${confidenceBadge}`}>
+                    <span className="text-sm font-bold">
                         {rec.confidence}% confidence
                     </span>
                 </div>

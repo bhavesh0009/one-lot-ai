@@ -12,7 +12,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL_GROUNDING = os.getenv("GEMINI_MODEL_GROUNDING", "gemini-2.5-flash")
 
 class NewsService:
     def __init__(self):
@@ -27,7 +27,7 @@ class NewsService:
     def fetch_news(self, query: str, type: str = "market"):
         """
         Fetch news using Google Gemini Grounded Search (Official API).
-        Uses model: gemini-2.5-flash
+        Uses model from GEMINI_MODEL_GROUNDING env var (default: gemini-2.5-flash)
         
         Args:
             query (str): The search query or ticker symbol.
@@ -58,7 +58,7 @@ class NewsService:
 
             start_time = time.time()
             response = self.client.models.generate_content(
-                model=GEMINI_MODEL,
+                model=GEMINI_MODEL_GROUNDING,
                 contents=prompt,
                 config=config
             )
@@ -68,7 +68,7 @@ class NewsService:
             try:
                 from services.llm_usage import llm_usage_tracker
                 ticker = query if type == "stock" else None
-                llm_usage_tracker.log_usage(GEMINI_MODEL, "news_service", ticker, response, latency_ms)
+                llm_usage_tracker.log_usage(GEMINI_MODEL_GROUNDING, "news_service", ticker, response, latency_ms)
             except Exception as e:
                 logger.warning(f"Failed to track LLM usage: {e}")
 

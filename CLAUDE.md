@@ -56,11 +56,11 @@ Services in `backend/services/` are initialized as singletons on startup:
 
 - **greeks.py**: Local Black-Scholes calculator for option Greeks (delta, gamma, theta, vega, IV). No external API calls—computed in-process for performance.
 
-- **news_service.py**: Fetches market and stock-specific news using Gemini Grounded Search API. Model name read from `GEMINI_MODEL` env var. Tracks token usage via `llm_usage.py`.
+- **news_service.py**: Fetches market and stock-specific news using Gemini Grounded Search API. Model name read from `GEMINI_MODEL_GROUNDING` env var. Tracks token usage via `llm_usage.py`.
 
-- **trade_advisor.py**: AI-powered intraday trade recommendation engine. `build_context(ticker)` gathers all data (technicals, live price, option chain with Greeks, news) and formats as rich markdown. `analyze(ticker)` sends this context to Gemini with a trader persona system prompt and parses the structured JSON recommendation. Model name read from `GEMINI_MODEL` env var.
+- **trade_advisor.py**: AI-powered intraday trade recommendation engine. `build_context(ticker)` gathers all data (technicals, live price, option chain with Greeks, news) and formats as rich markdown. `analyze(ticker)` sends this context to Gemini with a trader persona system prompt and parses the structured JSON recommendation. Model name read from `GEMINI_MODEL` env var. Logs every recommendation to `llm_usage.duckdb` for forward testing.
 
-- **llm_usage.py**: Tracks token usage (input, output, thinking), estimated cost (USD), and latency for every Gemini API call. Stores in `llm_usage.duckdb`. Includes pricing table for all current Gemini models with fuzzy model name matching. Exports `GEMINI_MODEL` config for other services.
+- **llm_usage.py**: Tracks token usage (input, output, thinking), estimated cost (USD), and latency for every Gemini API call. Also logs full trade recommendations for forward testing. Stores in `llm_usage.duckdb`. Includes pricing table for all current Gemini models with fuzzy model name matching. Exports `GEMINI_MODEL` and `GEMINI_MODEL_GROUNDING` config for other services.
 
 ### API Endpoints (`backend/api/endpoints.py`)
 
@@ -74,6 +74,8 @@ All routes prefixed with `/api`:
 - `GET /stock/{ticker}/recommendation` — AI trade recommendation (Gemini LLM). Returns structured JSON with direction, strategy, trades, confidence, rationale, and token usage
 - `GET /news/market` — General market news
 - `GET /stock/{ticker}/news` — Stock-specific news
+- `GET /recommendations?limit=50` — All past AI recommendations (for forward testing)
+- `GET /stock/{ticker}/recommendations?limit=50` — Past recommendations for a specific stock
 - `GET /llm/usage` — Aggregate LLM usage summary (total calls, tokens, cost)
 - `GET /llm/usage/recent?limit=20` — Recent LLM usage records
 
@@ -86,6 +88,7 @@ All routes prefixed with `/api`:
 3. Sends to Gemini with `system_instruction` (trader persona) + `contents` (dynamic markdown context)
 4. Parses structured JSON response with: direction, strategy, trade legs, entry/SL/target, risk/reward, confidence score, rationale
 5. Logs token usage + cost to `llm_usage.duckdb`
+6. Logs full recommendation to `recommendations` table for forward testing
 
 ### Frontend Architecture
 
@@ -100,7 +103,7 @@ All routes prefixed with `/api`:
 - `TickerSearch.jsx` — Autocomplete search with debouncing
 - `StockChart.jsx` — Recharts candlestick chart
 - `OptionChain.jsx` — Greeks-enabled option chain table
-- `TradeCard.jsx` — Trade recommendation display (**currently mocked**, not yet wired to `/api/stock/{ticker}/recommendation`)
+- `TradeCard.jsx` — AI trade recommendation display (wired to `/api/stock/{ticker}/recommendation`, loads in background after dashboard renders)
 - `NewsCard.jsx` — Market/stock news display
 
 **Custom hook:** `useStockData.js` manages data fetching, loading states, and logs. Centralized API orchestration.
@@ -121,7 +124,8 @@ For option chain:
 ### Environment Variables (`backend/.env`)
 - `ANGEL_ONE_API_KEY`, `ANGEL_ONE_CLIENT_CODE`, `ANGEL_ONE_PASSWORD`, `ANGEL_ONE_TOTP_SECRET` — Angel One SmartAPI credentials
 - `GEMINI_API_KEY` — Google Gemini API key
-- `GEMINI_MODEL` — Gemini model name (default: `gemini-2.5-flash`). Change to switch models (e.g. `gemini-2.5-pro`, `gemini-2.0-flash`, `gemini-3-flash-preview`). Used by both news_service and trade_advisor.
+- `GEMINI_MODEL` — Gemini model for AI trade recommendations (default: `gemini-2.5-pro`). Used by `trade_advisor.py`.
+- `GEMINI_MODEL_GROUNDING` — Gemini model for grounded search / news (default: `gemini-2.5-flash`). Must support Google Search tool. Used by `news_service.py`. Kept separate because not all models support grounding well (e.g. Pro lacks Google Search grounding).
 
 ## Key Patterns
 
@@ -150,6 +154,8 @@ Every Gemini API call (news + trade advisor) is logged to `llm_usage.duckdb` wit
 
 3. **TOTP-based auth:** Angel One requires TOTP secret for login. Session persists until backend restart.
 
-4. **Frontend TradeCard not wired:** `TradeCard.jsx` still uses mocked data from `useStockData.js`. Needs to be updated to call `/api/stock/{ticker}/recommendation` and render the new structured response (direction, strategy, trades, confidence, rationale).
+4. **Indian market monthly expiry only:** Stock options on NSE only have monthly expiry. The trade advisor prompt reflects this.
 
-5. **Indian market monthly expiry only:** Stock options on NSE only have monthly expiry. The trade advisor prompt reflects this.
+## Tech Debt
+
+1. **`log_recommendation` / `get_recommendations` in wrong file:** These methods currently live in `llm_usage.py` but conceptually belong in `trade_advisor.py` (or a dedicated `recommendation_log.py`). `llm_usage.py` should only handle token/cost tracking. The `recommendations` table can stay in `llm_usage.duckdb` but the methods should be moved to the service that owns the domain.

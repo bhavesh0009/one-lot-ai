@@ -502,6 +502,10 @@ class TradeAdvisor:
                 json_text = "\n".join(lines)
 
             recommendation = json.loads(json_text)
+
+            # Log recommendation for forward testing
+            llm_usage_tracker.log_recommendation(ticker, GEMINI_MODEL, recommendation)
+
             return {"error": None, "recommendation": recommendation, "usage": usage_info}
 
         except json.JSONDecodeError as e:

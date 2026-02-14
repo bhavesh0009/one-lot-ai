@@ -1,5 +1,6 @@
 
 import os
+import json
 import logging
 import duckdb
 from datetime import datetime
@@ -9,7 +10,8 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+GEMINI_MODEL_GROUNDING = os.getenv("GEMINI_MODEL_GROUNDING", "gemini-2.5-flash")
 USAGE_DB_PATH = "llm_usage.duckdb"
 
 # Pricing per 1M tokens (USD) — Source: Google AI pricing page
@@ -49,6 +51,28 @@ class LLMUsageTracker:
                     total_tokens INTEGER,
                     cost_usd DOUBLE,
                     latency_ms INTEGER
+                )
+            """)
+            self.conn.execute("CREATE SEQUENCE IF NOT EXISTS recommendations_seq START 1")
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS recommendations (
+                    id INTEGER DEFAULT nextval('recommendations_seq'),
+                    timestamp TIMESTAMP,
+                    ticker VARCHAR,
+                    model VARCHAR,
+                    direction VARCHAR,
+                    strategy VARCHAR,
+                    trades VARCHAR,
+                    entry_price DOUBLE,
+                    stop_loss DOUBLE,
+                    target DOUBLE,
+                    max_risk DOUBLE,
+                    max_reward DOUBLE,
+                    risk_reward_ratio VARCHAR,
+                    confidence INTEGER,
+                    rationale VARCHAR,
+                    risks VARCHAR,
+                    full_response VARCHAR
                 )
             """)
         except Exception as e:
@@ -166,6 +190,77 @@ class LLMUsageTracker:
             ]
         except Exception as e:
             logger.error(f"Failed to get recent usage: {e}")
+            return []
+
+    def log_recommendation(self, ticker, model, recommendation):
+        try:
+            rec = recommendation
+            self.conn.execute("""
+                INSERT INTO recommendations (timestamp, ticker, model, direction, strategy, trades, entry_price, stop_loss, target, max_risk, max_reward, risk_reward_ratio, confidence, rationale, risks, full_response)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                datetime.now(),
+                ticker,
+                model,
+                rec.get("direction"),
+                rec.get("strategy"),
+                json.dumps(rec.get("trades", [])),
+                rec.get("entry_price"),
+                rec.get("stop_loss"),
+                rec.get("target"),
+                rec.get("max_risk"),
+                rec.get("max_reward"),
+                rec.get("risk_reward_ratio"),
+                rec.get("confidence"),
+                rec.get("rationale"),
+                json.dumps(rec.get("risks", [])),
+                json.dumps(rec),
+            ])
+            logger.info(f"Recommendation logged: {ticker} {rec.get('direction')} {rec.get('strategy')} confidence={rec.get('confidence')}")
+        except Exception as e:
+            logger.error(f"Failed to log recommendation: {e}")
+
+    def get_recommendations(self, ticker=None, limit=50):
+        try:
+            if ticker:
+                rows = self.conn.execute("""
+                    SELECT id, timestamp, ticker, model, direction, strategy, trades, entry_price, stop_loss, target, max_risk, max_reward, risk_reward_ratio, confidence, rationale, risks
+                    FROM recommendations
+                    WHERE ticker = ?
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, [ticker.upper(), limit]).fetchall()
+            else:
+                rows = self.conn.execute("""
+                    SELECT id, timestamp, ticker, model, direction, strategy, trades, entry_price, stop_loss, target, max_risk, max_reward, risk_reward_ratio, confidence, rationale, risks
+                    FROM recommendations
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, [limit]).fetchall()
+
+            return [
+                {
+                    "id": r[0],
+                    "timestamp": str(r[1]),
+                    "ticker": r[2],
+                    "model": r[3],
+                    "direction": r[4],
+                    "strategy": r[5],
+                    "trades": json.loads(r[6]) if r[6] else [],
+                    "entry_price": r[7],
+                    "stop_loss": r[8],
+                    "target": r[9],
+                    "max_risk": r[10],
+                    "max_reward": r[11],
+                    "risk_reward_ratio": r[12],
+                    "confidence": r[13],
+                    "rationale": r[14],
+                    "risks": json.loads(r[15]) if r[15] else [],
+                }
+                for r in rows
+            ]
+        except Exception as e:
+            logger.error(f"Failed to get recommendations: {e}")
             return []
 
 
