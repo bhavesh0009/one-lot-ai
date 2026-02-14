@@ -1,63 +1,139 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, MinusCircle, Loader2 } from 'lucide-react';
 
-const TradeCard = ({ type, data, loading }) => {
-    if (loading) return <div className="animate-pulse h-64 bg-slate-800 rounded-xl"></div>;
-    if (!data) return null;
+const TradeCard = ({ data, loading }) => {
+    if (loading) {
+        return (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 flex items-center gap-3 text-slate-400">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Generating AI trade recommendation...</span>
+            </div>
+        );
+    }
 
-    const isCall = type === 'CALL';
-    const isPut = type === 'PUT';
-    const isAvoid = type === 'NO TRADE';
+    if (!data || data.error) return null;
+
+    const rec = data.recommendation;
+    if (!rec) return null;
+
+    const isBullish = rec.direction === 'BULLISH';
+    const isBearish = rec.direction === 'BEARISH';
+
+    const DirectionIcon = isBullish ? TrendingUp : isBearish ? TrendingDown : MinusCircle;
+    const dirColor = isBullish ? 'emerald' : isBearish ? 'red' : 'slate';
+
+    const confidenceColor = rec.confidence >= 70 ? 'emerald' : rec.confidence >= 50 ? 'amber' : 'red';
 
     return (
-        <div className={`relative overflow-hidden rounded-xl border p-6 ${isCall
-                ? 'bg-emerald-950/30 border-emerald-500/50'
-                : isPut
-                    ? 'bg-red-950/30 border-red-500/50'
-                    : 'bg-slate-900 border-slate-700'
-            }`}>
-            <div className="flex justify-between items-start mb-4">
+        <div className={`relative overflow-hidden rounded-xl border p-6 bg-${dirColor}-950/30 border-${dirColor}-500/50`}>
+            {/* Header */}
+            <div className="flex justify-between items-start mb-5">
                 <div>
-                    <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">AI Recommendation</h3>
-                    <div className="text-3xl font-bold mt-1 flex items-center gap-2">
-                        {isCall ? <TrendingUp className="text-emerald-400" /> : isPut ? <TrendingDown className="text-red-400" /> : <Activity className="text-slate-400" />}
-                        <span className={isCall ? 'text-emerald-400' : isPut ? 'text-red-400' : 'text-slate-200'}>
-                            {isAvoid ? 'AVOID TRADE' : `BUY ${data.ticker} ${data.strike} ${type}`}
+                    <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-1">AI Recommendation</h3>
+                    <div className="flex items-center gap-2">
+                        <DirectionIcon className={`w-7 h-7 text-${dirColor}-400`} />
+                        <span className={`text-2xl font-bold text-${dirColor}-400`}>
+                            {rec.direction} — {rec.strategy}
                         </span>
                     </div>
                 </div>
-                <div className="bg-slate-800 px-3 py-1 rounded-full text-xs font-mono text-slate-300">
-                    Confidence: {data.confidence || '87%'}
+                <div className={`bg-${confidenceColor}-500/20 border border-${confidenceColor}-500/30 px-3 py-1.5 rounded-full`}>
+                    <span className={`text-sm font-bold text-${confidenceColor}-400`}>
+                        {rec.confidence}% confidence
+                    </span>
                 </div>
             </div>
 
-            {!isAvoid && (
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
-                        <div className="text-xs text-slate-500">Entry Zone</div>
-                        <div className="text-xl font-mono font-semibold text-slate-200">₹{data.entry}</div>
-                    </div>
-                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
-                        <div className="text-xs text-slate-500">Stop Loss</div>
-                        <div className="text-xl font-mono font-semibold text-red-400">₹{data.sl}</div>
-                    </div>
-                    <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
-                        <div className="text-xs text-slate-500">Target</div>
-                        <div className="text-xl font-mono font-semibold text-emerald-400">₹{data.target}</div>
+            {/* Trade Legs */}
+            {rec.trades && rec.trades.length > 0 && (
+                <div className="mb-5">
+                    <div className="text-xs text-slate-500 uppercase font-semibold mb-2 tracking-wider">Trade Legs</div>
+                    <div className="space-y-2">
+                        {rec.trades.map((trade, idx) => (
+                            <div key={idx} className="bg-slate-900/60 border border-slate-700/50 rounded-lg px-4 py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${trade.action === 'BUY' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                        {trade.action}
+                                    </span>
+                                    <span className="text-slate-200 font-mono font-medium">
+                                        {trade.strike} {trade.option_type}
+                                    </span>
+                                    <span className="text-slate-500 text-sm">{trade.expiry}</span>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm">
+                                    <span className="text-slate-400">@ <span className="text-slate-200 font-mono">₹{trade.price}</span></span>
+                                    <span className="text-slate-400">{trade.lots} lot{trade.lots > 1 ? 's' : ''}</span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
 
-            <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Lot Size</span>
-                    <span className="text-slate-200 font-mono">{data.lotSize} Qty</span>
+            {/* Entry / SL / Target */}
+            <div className="grid grid-cols-3 gap-4 mb-5">
+                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <div className="text-xs text-slate-500">Entry</div>
+                    <div className="text-xl font-mono font-semibold text-slate-200">₹{rec.entry_price}</div>
                 </div>
-                <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Est. Capital</span>
-                    <span className="text-slate-200 font-mono">₹{(data.entry_price * data.lotSize).toLocaleString()}</span>
+                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <div className="text-xs text-slate-500">Stop Loss</div>
+                    <div className="text-xl font-mono font-semibold text-red-400">₹{rec.stop_loss}</div>
+                </div>
+                <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <div className="text-xs text-slate-500">Target</div>
+                    <div className="text-xl font-mono font-semibold text-emerald-400">₹{rec.target}</div>
                 </div>
             </div>
+
+            {/* Risk / Reward Row */}
+            <div className="grid grid-cols-3 gap-4 mb-5">
+                <div className="flex justify-between text-sm bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-500">Max Risk</span>
+                    <span className="text-red-400 font-mono">₹{rec.max_risk?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-500">Max Reward</span>
+                    <span className="text-emerald-400 font-mono">₹{rec.max_reward?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                    <span className="text-slate-500">R:R Ratio</span>
+                    <span className="text-cyan-400 font-mono">{rec.risk_reward_ratio}</span>
+                </div>
+            </div>
+
+            {/* Rationale */}
+            {rec.rationale && (
+                <div className="mb-4">
+                    <div className="text-xs text-slate-500 uppercase font-semibold mb-1.5 tracking-wider">Rationale</div>
+                    <p className="text-sm text-slate-300 leading-relaxed">{rec.rationale}</p>
+                </div>
+            )}
+
+            {/* Risks */}
+            {rec.risks && rec.risks.length > 0 && (
+                <div>
+                    <div className="text-xs text-slate-500 uppercase font-semibold mb-1.5 tracking-wider">Risks</div>
+                    <ul className="space-y-1">
+                        {rec.risks.map((risk, idx) => (
+                            <li key={idx} className="text-sm text-slate-400 flex items-start gap-2">
+                                <span className="text-red-500 mt-0.5">•</span>
+                                {risk}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* Usage info */}
+            {data.usage && (
+                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center gap-4 text-[11px] text-slate-600">
+                    <span>{data.usage.model}</span>
+                    <span>{data.usage.input_tokens + data.usage.output_tokens} tokens</span>
+                    <span>${data.usage.cost_usd?.toFixed(4)}</span>
+                    <span>{(data.usage.latency_ms / 1000).toFixed(1)}s</span>
+                </div>
+            )}
         </div>
     );
 };

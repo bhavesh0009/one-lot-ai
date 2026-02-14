@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
-import { fetchStockInfo, fetchStockHistory, fetchStockTechnicals, fetchStockOptionChain, fetchStockNews } from '../libs/api';
+import { fetchStockInfo, fetchStockHistory, fetchStockTechnicals, fetchStockOptionChain, fetchStockNews, fetchRecommendation } from '../libs/api';
 
 export const useStockData = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
 
   const addLog = (msg) => {
     setLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), msg }]);
@@ -16,6 +17,7 @@ export const useStockData = () => {
     setError(null);
     setLogs([]);
     setData(null);
+    setRecommendationLoading(false);
 
     try {
       addLog(`Fetching Info for ${ticker}...`);
@@ -50,6 +52,7 @@ export const useStockData = () => {
         addLog("Stock news fetch failed.");
       }
 
+      // Set data first so dashboard renders while recommendation loads
       setData({
         basic: info.basic,
         banStatus: info.ban_status,
@@ -60,27 +63,32 @@ export const useStockData = () => {
         technicals,
         chain: chainData,
         news: newsData,
-        // Mocking trade recommendation for now as per plan
-        recommendation: {
-          ticker: ticker,
-          strike: Math.round(info.latest_ohlcv.close), // Mock strike ATM
-          type: "CE", // Mock
-          entry: (info.latest_ohlcv.close * 0.01).toFixed(2), // Mock
-          sl: (info.latest_ohlcv.close * 0.005).toFixed(2), // Mock
-          target: (info.latest_ohlcv.close * 0.02).toFixed(2), // Mock
-          lotSize: info.basic.lot_size,
-          confidence: 'Mocked 85%'
-        }
+        recommendation: null,
       });
-      addLog("Analysis Complete.");
+      setLoading(false);
+
+      // Fetch recommendation in background (takes 10-30s)
+      addLog("Generating AI Trade Recommendation...");
+      setRecommendationLoading(true);
+      try {
+        const rec = await fetchRecommendation(ticker);
+        setData(prev => prev ? { ...prev, recommendation: rec } : prev);
+        addLog("AI Recommendation Ready.");
+      } catch (e) {
+        console.warn("Recommendation fetch failed", e);
+        addLog("AI Recommendation failed.");
+        setData(prev => prev ? { ...prev, recommendation: { error: e.message } } : prev);
+      } finally {
+        setRecommendationLoading(false);
+      }
+
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to fetch data");
       addLog(`Error: ${err.message}`);
-    } finally {
       setLoading(false);
     }
   }, []);
 
-  return { data, loading, error, logs, loadStockData };
+  return { data, loading, error, logs, loadStockData, recommendationLoading };
 };

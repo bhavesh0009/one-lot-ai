@@ -9,7 +9,7 @@ import TickerSearch from './components/TickerSearch';
 import NewsCard from './components/NewsCard';
 
 export default function App() {
-  const { data, loading, error, logs, loadStockData } = useStockData();
+  const { data, loading, error, logs, loadStockData, recommendationLoading } = useStockData();
 
   const handleSelect = (symbol) => {
     loadStockData(symbol);
@@ -296,10 +296,10 @@ export default function App() {
               {/* Option Chain */}
               <OptionChain data={data.chain} />
 
-              {/* AI Trade Card (Mocked) */}
+              {/* AI Trade Recommendation */}
               <TradeCard
-                type={data.recommendation.type}
                 data={data.recommendation}
+                loading={recommendationLoading}
               />
 
               {/* Stock News / AI Reasoning */}

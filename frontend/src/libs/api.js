@@ -35,4 +35,9 @@ export const fetchStockNews = async (ticker) => {
   return response.data;
 };
 
+export const fetchRecommendation = async (ticker) => {
+  const response = await api.get(`/stock/${ticker}/recommendation`, { timeout: 60000 });
+  return response.data;
+};
+
 export default api;
