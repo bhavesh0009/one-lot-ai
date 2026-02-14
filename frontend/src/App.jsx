@@ -273,15 +273,17 @@ export default function App() {
             </div>
 
             {/* Right Column: Visuals & Trade Logic */}
-            <div className="col-span-1 md:col-span-1 lg:col-span-9 space-y-4">
+            <div className="col-span-1 md:col-span-1 lg:col-span-9 space-y-4 flex flex-col min-h-0">
               {/* AI Trade Recommendation - First */}
-              <TradeCard
-                data={data.recommendation}
-                loading={recommendationLoading}
-              />
+              <div className="flex-shrink-0">
+                <TradeCard
+                  data={data.recommendation}
+                  loading={recommendationLoading}
+                />
+              </div>
 
               {/* Chart - Second */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative group p-4">
+              <div className="flex-shrink-0 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative group p-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-slate-400 font-medium flex items-center gap-2">
                     <Activity className="w-4 h-4" /> Price Action (Last Year)
@@ -291,10 +293,12 @@ export default function App() {
               </div>
 
               {/* Option Chain - Third */}
-              <OptionChain data={data.chain} />
+              <div className="flex-shrink-0">
+                <OptionChain data={data.chain} />
+              </div>
 
               {/* Stock Specific News - Fourth (renamed from AI Analysis) */}
-              <div className="max-h-96">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <NewsCard
                   title={`Share Specific News: ${data.basic.symbol}`}
                   news={data.news || { text: "Loading specific news..." }}
@@ -303,7 +307,7 @@ export default function App() {
               </div>
 
               {/* Market News - Fifth (moved from left) */}
-              <div className="max-h-96">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <NewsCard
                   title="Market News"
                   news={marketNews}
