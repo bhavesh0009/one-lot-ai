@@ -46,3 +46,8 @@ frontend_design_mock.js
 .gemini/
 
 prompts.md
+
+# Playwright
+*.png
+.playwright-mcp/
+playwright-report/

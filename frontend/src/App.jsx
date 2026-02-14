@@ -68,15 +68,15 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-6">
         {/* Search Section */}
-        <div className="flex justify-center mb-12">
+        <div className="flex justify-center mb-8">
           <TickerSearch onSelect={handleSelect} loading={loading} />
         </div>
 
         {/* Loading / Status State */}
         {loading && (
-          <div className="max-w-2xl mx-auto mb-12">
+          <div className="max-w-2xl mx-auto mb-8">
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-2xl">
               <h3 className="text-lg font-medium text-emerald-400 mb-4 flex items-center gap-2">
                 <RefreshCw className="w-5 h-5 animate-spin" />
@@ -95,17 +95,17 @@ export default function App() {
         )}
 
         {error && (
-          <div className="max-w-2xl mx-auto mb-12 text-center text-red-500 bg-red-500/10 p-4 rounded-xl border border-red-500/20">
+          <div className="max-w-2xl mx-auto mb-8 text-center text-red-500 bg-red-500/10 p-4 rounded-xl border border-red-500/20">
             {error}
           </div>
         )}
 
         {/* Main Dashboard */}
         {!loading && data && (
-          <div className="grid grid-cols-12 gap-6 animate-in fade-in zoom-in-95 duration-500">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 animate-in fade-in zoom-in-95 duration-500">
 
-            {/* Left Column: Ticker Info & Technicals */}
-            <div className="col-span-12 lg:col-span-3 space-y-6">
+            {/* Left Column: Ticker Info & Technicals (Sticky) */}
+            <div className="col-span-1 md:col-span-1 lg:col-span-3 space-y-4 flex flex-col h-fit lg:sticky lg:top-20">
               {/* Ticker Card */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
                 <div className="flex justify-between items-start mb-4">
@@ -272,17 +272,19 @@ export default function App() {
               </div>
 
 
-              {/* Market News Card (Left Column) */}
-              <NewsCard
-                title="Market News"
-                news={marketNews}
-                loading={marketNewsLoading}
-                onRefresh={refreshMarketNews}
-              />
+              {/* Market News Card (Left Column) - Limited Height */}
+              <div className="lg:flex-1 lg:min-h-0 lg:max-h-96">
+                <NewsCard
+                  title="Market News"
+                  news={marketNews}
+                  loading={marketNewsLoading}
+                  onRefresh={refreshMarketNews}
+                />
+              </div>
             </div>
 
-            {/* Middle Column: Visuals & Trade Logic */}
-            <div className="col-span-12 lg:col-span-9 space-y-6">
+            {/* Right Column: Visuals & Trade Logic */}
+            <div className="col-span-1 md:col-span-1 lg:col-span-9 space-y-4">
               {/* Chart */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative group p-4">
                 <div className="flex justify-between items-center mb-4">
@@ -302,12 +304,14 @@ export default function App() {
                 loading={recommendationLoading}
               />
 
-              {/* Stock News / AI Reasoning */}
-              <NewsCard
-                title={`AI Analysis: ${data.basic.symbol}`}
-                news={data.news || { text: "Loading specific news..." }}
-                loading={loading}
-              />
+              {/* Stock News / AI Reasoning - Limited Height */}
+              <div className="max-h-96">
+                <NewsCard
+                  title={`AI Analysis: ${data.basic.symbol}`}
+                  news={data.news || { text: "Loading specific news..." }}
+                  loading={loading}
+                />
+              </div>
             </div>
 
           </div>
