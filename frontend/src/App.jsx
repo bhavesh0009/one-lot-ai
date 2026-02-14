@@ -270,22 +270,17 @@ export default function App() {
                   </div>
                 )}
               </div>
-
-
-              {/* Market News Card (Left Column) - Limited Height */}
-              <div className="lg:flex-1 lg:min-h-0 lg:max-h-96">
-                <NewsCard
-                  title="Market News"
-                  news={marketNews}
-                  loading={marketNewsLoading}
-                  onRefresh={refreshMarketNews}
-                />
-              </div>
             </div>
 
             {/* Right Column: Visuals & Trade Logic */}
             <div className="col-span-1 md:col-span-1 lg:col-span-9 space-y-4">
-              {/* Chart */}
+              {/* AI Trade Recommendation - First */}
+              <TradeCard
+                data={data.recommendation}
+                loading={recommendationLoading}
+              />
+
+              {/* Chart - Second */}
               <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative group p-4">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-slate-400 font-medium flex items-center gap-2">
@@ -295,21 +290,25 @@ export default function App() {
                 <StockChart data={data.history || []} ticker={data.basic.symbol} />
               </div>
 
-              {/* Option Chain */}
+              {/* Option Chain - Third */}
               <OptionChain data={data.chain} />
 
-              {/* AI Trade Recommendation */}
-              <TradeCard
-                data={data.recommendation}
-                loading={recommendationLoading}
-              />
-
-              {/* Stock News / AI Reasoning - Limited Height */}
+              {/* Stock Specific News - Fourth (renamed from AI Analysis) */}
               <div className="max-h-96">
                 <NewsCard
-                  title={`AI Analysis: ${data.basic.symbol}`}
+                  title={`Share Specific News: ${data.basic.symbol}`}
                   news={data.news || { text: "Loading specific news..." }}
                   loading={loading}
+                />
+              </div>
+
+              {/* Market News - Fifth (moved from left) */}
+              <div className="max-h-96">
+                <NewsCard
+                  title="Market News"
+                  news={marketNews}
+                  loading={marketNewsLoading}
+                  onRefresh={refreshMarketNews}
                 />
               </div>
             </div>
