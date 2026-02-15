@@ -276,6 +276,7 @@ class LLMUsageTracker:
     def log_validation_failure(self, ticker, reason, details=None):
         """Log a failed validation attempt for monitoring."""
         if not self.conn:
+            logger.warning(f"Cannot log validation failure (DB not connected): {ticker} - {reason}")
             return
         try:
             details_json = json.dumps(details) if details else None

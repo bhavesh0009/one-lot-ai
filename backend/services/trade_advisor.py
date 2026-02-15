@@ -329,27 +329,32 @@ class TradeAdvisor:
 
         chain = self._get_option_chain(ticker, current_price)
 
-        # DEBUG: Log complete chain structure
+        # DEBUG: Log complete chain structure - with explicit printing
         if chain:
-            logger.info(f"\n{'='*80}")
-            logger.info(f"OPTION CHAIN DATA FOR {ticker}")
-            logger.info(f"{'='*80}")
-            logger.info(f"Underlying Price: {chain.get('underlying')}")
-            logger.info(f"Expiry: {chain.get('expiry')}")
-            logger.info(f"Lot Size: {chain.get('lot_size')}")
-            logger.info(f"ATM Strike: {chain.get('atm_strike')}")
-            logger.info(f"Total Strikes: {len(chain.get('chain', []))}")
+            print(f"\n{'='*80}", flush=True)
+            print(f"OPTION CHAIN DATA FOR {ticker}", flush=True)
+            print(f"{'='*80}", flush=True)
+            print(f"Underlying Price: {chain.get('underlying')}", flush=True)
+            print(f"Expiry: {chain.get('expiry')}", flush=True)
+            print(f"Lot Size: {chain.get('lot_size')}", flush=True)
+            print(f"ATM Strike: {chain.get('atm_strike')}", flush=True)
+            print(f"Total Strikes: {len(chain.get('chain', []))}", flush=True)
 
-            # Log prices for each strike
+            # Log prices for ALL strikes
             if chain.get('chain'):
-                logger.info(f"\nStrike Prices (first 5):")
-                for i, row in enumerate(chain['chain'][:5]):
+                print(f"\nALL Strike Prices:", flush=True)
+                for i, row in enumerate(chain['chain']):
                     strike = row.get('strike')
-                    ce_price = row.get('ce', {}).get('price')
-                    pe_price = row.get('pe', {}).get('price')
-                    ce_oi = row.get('ce', {}).get('oi')
-                    pe_oi = row.get('pe', {}).get('oi')
-                    logger.info(f"  Strike {strike}: CE_Price={ce_price} (OI={ce_oi}), PE_Price={pe_price} (OI={pe_oi})")
+                    ce = row.get('ce', {})
+                    pe = row.get('pe', {})
+                    ce_price = ce.get('price', 0)
+                    pe_price = pe.get('price', 0)
+                    ce_oi = ce.get('oi', 0)
+                    pe_oi = pe.get('oi', 0)
+                    ce_delta = ce.get('delta', 0)
+                    pe_delta = pe.get('delta', 0)
+                    status = "✓ VALID" if (ce_price > 0 or pe_price > 0) else "✗ ZERO"
+                    print(f"  [{i+1}] Strike {strike}: CE={ce_price:.2f} (OI={ce_oi:,}, Δ={ce_delta:.3f}), PE={pe_price:.2f} (OI={pe_oi:,}, Δ={pe_delta:.3f}) {status}", flush=True)
 
         # VALIDATION: Check critical data before building context
         is_valid, error_msg = _validate_critical_data(tech, chain)
