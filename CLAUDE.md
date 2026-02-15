@@ -51,6 +51,13 @@ Backend requires `.env` file with Angel One and Gemini API credentials. Copy fro
 Services in `backend/services/` are initialized as singletons on startup:
 
 - **angel_one.py**: Angel One SmartAPI client. Handles authentication using TOTP, fetches live LTP and market data. Session-based with JWT tokens.
+  - **Rate limiting:** `/market/v1/quote` endpoint has rate limits (~20-25 concurrent requests). `get_market_data_batch()` implements intelligent batching:
+    - Splits tokens into **5-token batches** (reduces quota consumption per request)
+    - Adds **300ms delay between batches** to respect rate limits
+    - Implements **exponential backoff retry** for AB1004 errors (1s → 2s → 4s delays)
+    - Up to **3 retry attempts per batch**
+    - Returns **partial results** even if some batches fail
+    - Logs detailed batch progress for debugging
 
 - **instrument_service.py**: Manages Angel One instrument master. Provides token lookups for NSE stocks and option chain symbol resolution. Downloads and caches data in instruments.duckdb.
 
@@ -92,21 +99,44 @@ All routes prefixed with `/api`:
 
 ### Frontend Architecture
 
-**Main entry:** `frontend/src/App.jsx` — Dashboard with ticker search and data display.
+**Routing:** App uses React Router v6 for client-side routing:
+- `frontend/src/App.jsx` — Route wrapper with Header + Routes component
+- `frontend/src/main.jsx` — Wrapped with `<BrowserRouter>`
+- `frontend/src/components/Header.jsx` — Navigation header with active link styling
+
+**Pages:**
+1. **DashboardPage** (`frontend/src/pages/DashboardPage.jsx`) — Main stock analysis dashboard
+   - Ticker search via `TickerSearch.jsx`
+   - Stock info, technicals, AI recommendation, chart, option chain, news
+   - All logic extracted from original App.jsx
+
+2. **RecommendationsPage** (`frontend/src/pages/RecommendationsPage.jsx`) — Historical recommendations table
+   - Displays all past AI trade recommendations from `/api/recommendations`
+   - Filters: by ticker (dropdown), direction (BULLISH/BEARISH/NEUTRAL buttons)
+   - Sorting: by date, confidence, risk:reward ratio
+   - Expandable rows: click to view full details (trade legs, rationale, risks, model info)
+   - Color-coded by direction (green/red/gray)
+   - Responsive table with horizontal scroll on mobile
 
 **Data flow:**
-1. User searches ticker → `TickerSearch.jsx` calls `/api/search`
-2. User selects stock → `useStockData` hook orchestrates all API calls
-3. Data loaded into local state → Passed to display components
+1. User navigates to `/` → DashboardPage
+2. User searches ticker → `TickerSearch.jsx` calls `/api/search`
+3. User selects stock → `useStockData` hook orchestrates API calls
+4. User navigates to `/recommendations` → RecommendationsPage
+5. Page fetches `/api/recommendations?limit=100` → filter/sort client-side
 
 **Key components:**
 - `TickerSearch.jsx` — Autocomplete search with debouncing
+- `Header.jsx` — Navigation with active state based on `useLocation()`
 - `StockChart.jsx` — Recharts candlestick chart
 - `OptionChain.jsx` — Greeks-enabled option chain table
-- `TradeCard.jsx` — AI trade recommendation display (wired to `/api/stock/{ticker}/recommendation`, loads in background after dashboard renders)
+- `TradeCard.jsx` — AI trade recommendation display (loads in background)
 - `NewsCard.jsx` — Market/stock news display
 
 **Custom hook:** `useStockData.js` manages data fetching, loading states, and logs. Centralized API orchestration.
+
+**API Functions** (`frontend/src/libs/api.js`):
+- `fetchRecommendations(limit=100)` — Fetch all past AI recommendations
 
 ### Live Data Strategy
 
@@ -155,6 +185,8 @@ Every Gemini API call (news + trade advisor) is logged to `llm_usage.duckdb` wit
 3. **TOTP-based auth:** Angel One requires TOTP secret for login. Session persists until backend restart.
 
 4. **Indian market monthly expiry only:** Stock options on NSE only have monthly expiry. The trade advisor prompt reflects this.
+
+5. **Angel One API rate limiting:** The `/market/v1/quote` endpoint (used for option chain prices) has rate limits that trigger AB1004 errors after ~20-25 concurrent requests. During market closed hours, the API may return persistent errors. Market hours: 9:15 AM - 3:30 PM IST (Mon-Fri). Retry logic with exponential backoff is implemented in `get_market_data_batch()` to handle this gracefully.
 
 ## Tech Debt
 
