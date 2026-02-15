@@ -40,4 +40,9 @@ export const fetchRecommendation = async (ticker) => {
   return response.data;
 };
 
+export const fetchRecommendations = async (limit = 100) => {
+  const response = await api.get(`/recommendations?limit=${limit}`);
+  return response.data;
+};
+
 export default api;
