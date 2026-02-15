@@ -82,6 +82,39 @@ def _pct_change(current, previous):
     return ((current - previous) / previous) * 100
 
 
+def _validate_critical_data(tech, chain):
+    """Validate that critical data required for recommendation is present.
+
+    Returns:
+        (is_valid: bool, error_message: str or None)
+    """
+    # Check 1: Option chain must exist
+    if not chain or not isinstance(chain, dict):
+        return False, "Option chain data is unavailable. Cannot generate options recommendations without live option chain."
+
+    # Check 2: Option chain must have actual data
+    if not chain.get('chain') or len(chain['chain']) == 0:
+        return False, "Option chain returned empty data. No strikes available."
+
+    # Check 3: Option chain must have minimum 5 valid strikes
+    valid_strikes = 0
+    for row in chain['chain']:
+        ce_price = row.get('ce', {}).get('price', 0)
+        pe_price = row.get('pe', {}).get('price', 0)
+        if ce_price > 0 or pe_price > 0:
+            valid_strikes += 1
+
+    if valid_strikes < 5:
+        return False, f"Option chain has only {valid_strikes} valid strikes (minimum 5 required). This usually indicates Angel One API returned partial data."
+
+    # Check 4: Must have lot size
+    if not chain.get('lot_size') or chain['lot_size'] == 'N/A':
+        return False, "Lot size information is missing from option chain."
+
+    # All critical checks passed
+    return True, None
+
+
 class TradeAdvisor:
     def __init__(self):
         self.api_key = GEMINI_API_KEY
@@ -289,6 +322,12 @@ class TradeAdvisor:
 
         chain = self._get_option_chain(ticker, current_price)
 
+        # VALIDATION: Check critical data before building context
+        is_valid, error_msg = _validate_critical_data(tech, chain)
+        if not is_valid:
+            logger.warning(f"Cannot build context for {ticker}: {error_msg}")
+            return None  # Return None instead of building incomplete context
+
         stock_news = news_service.fetch_news(ticker, "stock")
         market_news = news_service.fetch_news("market", "market")
 
@@ -463,9 +502,62 @@ class TradeAdvisor:
         if not self.client:
             return {"error": "Gemini API key not configured.", "recommendation": None}
 
+        # Fetch data for early validation before building full context
+        tech = self._get_stock_data(ticker)
+        live_ltp = self._get_live_price(ticker)
+
+        if live_ltp:
+            current_price = live_ltp
+        elif tech:
+            current_price = tech['close']
+        else:
+            return {
+                "error": f"Cannot fetch price data for {ticker}. Stock may not exist or data unavailable.",
+                "recommendation": None
+            }
+
+        # Fetch option chain and validate critical data
+        chain = self._get_option_chain(ticker, current_price)
+
+        # DEBUG: Log chain structure
+        if chain and chain.get('chain'):
+            valid_price_count = 0
+            for row in chain['chain']:
+                if row.get('ce', {}).get('price', 0) > 0 or row.get('pe', {}).get('price', 0) > 0:
+                    valid_price_count += 1
+            logger.warning(f"DEBUG [{ticker}] Chain has {len(chain['chain'])} strikes, {valid_price_count} with valid prices")
+
+        is_valid, error_msg = _validate_critical_data(tech, chain)
+        logger.warning(f"*** VALIDATION for {ticker}: is_valid={is_valid}, error={error_msg[:80] if error_msg else 'None'}")
+
+        if not is_valid:
+            # Log validation failure to database for monitoring
+            valid_strikes = 0
+            total_strikes = 0
+            if chain and chain.get('chain'):
+                total_strikes = len(chain['chain'])
+                for row in chain['chain']:
+                    ce_price = row.get('ce', {}).get('price', 0)
+                    pe_price = row.get('pe', {}).get('price', 0)
+                    if ce_price > 0 or pe_price > 0:
+                        valid_strikes += 1
+
+            llm_usage_tracker.log_validation_failure(
+                ticker,
+                error_msg,
+                details={"valid_strikes": valid_strikes, "total_strikes": total_strikes}
+            )
+
+            return {
+                "error": f"Cannot generate recommendation: {error_msg}",
+                "recommendation": None,
+                "missing_data": "option_chain"
+            }
+
+        # Build full context (will succeed since validation passed)
         context = self.build_context(ticker)
         if not context:
-            return {"error": f"Could not build trading context for {ticker}. Stock may not exist or data unavailable.", "recommendation": None}
+            return {"error": f"Failed to build trading context for {ticker}.", "recommendation": None}
 
         try:
             config = types.GenerateContentConfig(

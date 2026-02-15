@@ -75,6 +75,16 @@ class LLMUsageTracker:
                     full_response VARCHAR
                 )
             """)
+            self.conn.execute("CREATE SEQUENCE IF NOT EXISTS validation_failures_seq START 1")
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS validation_failures (
+                    id INTEGER DEFAULT nextval('validation_failures_seq'),
+                    timestamp TIMESTAMP,
+                    ticker VARCHAR,
+                    reason VARCHAR,
+                    validation_details VARCHAR
+                )
+            """)
         except Exception as e:
             logger.error(f"Failed to initialize llm_usage DB: {e}")
 
@@ -262,6 +272,20 @@ class LLMUsageTracker:
         except Exception as e:
             logger.error(f"Failed to get recommendations: {e}")
             return []
+
+    def log_validation_failure(self, ticker, reason, details=None):
+        """Log a failed validation attempt for monitoring."""
+        if not self.conn:
+            return
+        try:
+            details_json = json.dumps(details) if details else None
+            self.conn.execute("""
+                INSERT INTO validation_failures (timestamp, ticker, reason, validation_details)
+                VALUES (?, ?, ?, ?)
+            """, [datetime.now(), ticker, reason, details_json])
+            logger.info(f"Validation failure logged for {ticker}: {reason}")
+        except Exception as e:
+            logger.error(f"Failed to log validation failure: {e}")
 
 
 # Singleton
