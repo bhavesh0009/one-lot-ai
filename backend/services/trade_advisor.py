@@ -262,6 +262,13 @@ class TradeAdvisor:
             all_tokens = [str(op['token']) for op in options]
             market_data = angel_service.get_market_data_batch(all_tokens, "NFO")
 
+            # DEBUG: Log market_data results
+            logger.info(f"[{ticker}] Market data batch: requested {len(all_tokens)} tokens, got {len(market_data)} results")
+            if market_data:
+                # Count how many have valid prices
+                valid_prices = sum(1 for md in market_data.values() if md.get('ltp', 0) > 0)
+                logger.info(f"[{ticker}] Valid prices: {valid_prices}/{len(market_data)}")
+
             lot_size = options[0].get('lotsize', 'N/A')
 
             grouped = {}
@@ -322,8 +329,32 @@ class TradeAdvisor:
 
         chain = self._get_option_chain(ticker, current_price)
 
+        # DEBUG: Log complete chain structure
+        if chain:
+            logger.info(f"\n{'='*80}")
+            logger.info(f"OPTION CHAIN DATA FOR {ticker}")
+            logger.info(f"{'='*80}")
+            logger.info(f"Underlying Price: {chain.get('underlying')}")
+            logger.info(f"Expiry: {chain.get('expiry')}")
+            logger.info(f"Lot Size: {chain.get('lot_size')}")
+            logger.info(f"ATM Strike: {chain.get('atm_strike')}")
+            logger.info(f"Total Strikes: {len(chain.get('chain', []))}")
+
+            # Log prices for each strike
+            if chain.get('chain'):
+                logger.info(f"\nStrike Prices (first 5):")
+                for i, row in enumerate(chain['chain'][:5]):
+                    strike = row.get('strike')
+                    ce_price = row.get('ce', {}).get('price')
+                    pe_price = row.get('pe', {}).get('price')
+                    ce_oi = row.get('ce', {}).get('oi')
+                    pe_oi = row.get('pe', {}).get('oi')
+                    logger.info(f"  Strike {strike}: CE_Price={ce_price} (OI={ce_oi}), PE_Price={pe_price} (OI={pe_oi})")
+
         # VALIDATION: Check critical data before building context
         is_valid, error_msg = _validate_critical_data(tech, chain)
+        logger.warning(f"[{ticker}] Validation: valid={is_valid}, msg={error_msg[:80] if error_msg else 'PASS'}")
+
         if not is_valid:
             logger.warning(f"Cannot build context for {ticker}: {error_msg}")
             return None  # Return None instead of building incomplete context
