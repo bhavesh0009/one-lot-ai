@@ -262,13 +262,6 @@ class TradeAdvisor:
             all_tokens = [str(op['token']) for op in options]
             market_data = angel_service.get_market_data_batch(all_tokens, "NFO")
 
-            # DEBUG: Log market_data results
-            logger.info(f"[{ticker}] Market data batch: requested {len(all_tokens)} tokens, got {len(market_data)} results")
-            if market_data:
-                # Count how many have valid prices
-                valid_prices = sum(1 for md in market_data.values() if md.get('ltp', 0) > 0)
-                logger.info(f"[{ticker}] Valid prices: {valid_prices}/{len(market_data)}")
-
             lot_size = options[0].get('lotsize', 'N/A')
 
             grouped = {}
@@ -329,36 +322,8 @@ class TradeAdvisor:
 
         chain = self._get_option_chain(ticker, current_price)
 
-        # DEBUG: Log complete chain structure - with explicit printing
-        if chain:
-            print(f"\n{'='*80}", flush=True)
-            print(f"OPTION CHAIN DATA FOR {ticker}", flush=True)
-            print(f"{'='*80}", flush=True)
-            print(f"Underlying Price: {chain.get('underlying')}", flush=True)
-            print(f"Expiry: {chain.get('expiry')}", flush=True)
-            print(f"Lot Size: {chain.get('lot_size')}", flush=True)
-            print(f"ATM Strike: {chain.get('atm_strike')}", flush=True)
-            print(f"Total Strikes: {len(chain.get('chain', []))}", flush=True)
-
-            # Log prices for ALL strikes
-            if chain.get('chain'):
-                print(f"\nALL Strike Prices:", flush=True)
-                for i, row in enumerate(chain['chain']):
-                    strike = row.get('strike')
-                    ce = row.get('ce', {})
-                    pe = row.get('pe', {})
-                    ce_price = ce.get('price', 0)
-                    pe_price = pe.get('price', 0)
-                    ce_oi = ce.get('oi', 0)
-                    pe_oi = pe.get('oi', 0)
-                    ce_delta = ce.get('delta', 0)
-                    pe_delta = pe.get('delta', 0)
-                    status = "✓ VALID" if (ce_price > 0 or pe_price > 0) else "✗ ZERO"
-                    print(f"  [{i+1}] Strike {strike}: CE={ce_price:.2f} (OI={ce_oi:,}, Δ={ce_delta:.3f}), PE={pe_price:.2f} (OI={pe_oi:,}, Δ={pe_delta:.3f}) {status}", flush=True)
-
         # VALIDATION: Check critical data before building context
         is_valid, error_msg = _validate_critical_data(tech, chain)
-        logger.warning(f"[{ticker}] Validation: valid={is_valid}, msg={error_msg[:80] if error_msg else 'PASS'}")
 
         if not is_valid:
             logger.warning(f"Cannot build context for {ticker}: {error_msg}")
@@ -555,16 +520,7 @@ class TradeAdvisor:
         # Fetch option chain and validate critical data
         chain = self._get_option_chain(ticker, current_price)
 
-        # DEBUG: Log chain structure
-        if chain and chain.get('chain'):
-            valid_price_count = 0
-            for row in chain['chain']:
-                if row.get('ce', {}).get('price', 0) > 0 or row.get('pe', {}).get('price', 0) > 0:
-                    valid_price_count += 1
-            logger.warning(f"DEBUG [{ticker}] Chain has {len(chain['chain'])} strikes, {valid_price_count} with valid prices")
-
         is_valid, error_msg = _validate_critical_data(tech, chain)
-        logger.warning(f"*** VALIDATION for {ticker}: is_valid={is_valid}, error={error_msg[:80] if error_msg else 'None'}")
 
         if not is_valid:
             # Log validation failure to database for monitoring
