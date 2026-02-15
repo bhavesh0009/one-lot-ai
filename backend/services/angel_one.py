@@ -83,58 +83,99 @@ class AngelOneService:
 
     def get_market_data_batch(self, tokens: list, exchange: str = "NFO"):
         """
-        Fetch market data for multiple tokens in ONE API call.
-        Mode FULL returns: ltp, open, high, low, close, volume, OI, etc.
-        
+        Fetch market data for multiple tokens with intelligent batching and retry logic.
+
+        Angel One API has rate limiting on /market/v1/quote endpoint.
+        This method:
+        - Splits tokens into small batches (5 tokens) to avoid quota exhaustion
+        - Implements exponential backoff retry for AB1004 errors (rate limit)
+        - Adds delays between batches to respect API rate limits
+
         Args:
             tokens: list of token strings e.g. ["131523", "131524"]
             exchange: "NSE" or "NFO"
         Returns:
-            dict keyed by token -> {ltp, oi, volume, ...} or empty dict on failure
+            dict keyed by token -> {ltp, oi, volume, ...} or partial dict on partial failure
         """
         if not tokens:
             return {}
-        
-        # Map exchange name to Angel One exchange type key
+
+        # Split into small batches to avoid rate limit
+        # Angel One rate limits after ~20-25 consecutive requests
+        batch_size = 5  # Small batch to reduce API quota consumption per request
+        batches = [tokens[i:i + batch_size] for i in range(0, len(tokens), batch_size)]
+
         exchange_key = "NFO" if exchange == "NFO" else "NSE"
-        exchange_tokens = {exchange_key: tokens}
-        
-        try:
-            response = self._retry_call(
-                self.smart_api.getMarketData, "FULL", exchange_tokens
-            )
-            
-            if response and response.get('status') and response.get('data'):
-                fetched = response['data'].get('fetched', [])
-                unfetched = response['data'].get('unfetched', [])
-                
-                if unfetched:
-                    logger.warning(f"Unfetched tokens: {unfetched}")
-                
-                # Build dict keyed by token
-                result = {}
-                for item in fetched:
-                    result[item['symbolToken']] = {
-                        'ltp': item.get('ltp', 0),
-                        'open': item.get('open', 0),
-                        'high': item.get('high', 0),
-                        'low': item.get('low', 0),
-                        'close': item.get('close', 0),
-                        'volume': item.get('tradeVolume', 0),
-                        'oi': item.get('opnInterest', 0),
-                        'oi_change_pct': item.get('oiUpper', 0),  # OI change fields
-                        'last_trade_qty': item.get('lastTradeQty', 0),
-                        'total_buy_qty': item.get('totBuyQuan', 0),
-                        'total_sell_qty': item.get('totSellQuan', 0),
-                    }
-                return result
-            else:
-                logger.error(f"Batch market data failed: {response}")
-                return {}
-                
-        except Exception as e:
-            logger.error(f"Error in batch market data: {e}")
-            return {}
+        result = {}
+        total_batches = len(batches)
+
+        for batch_num, batch in enumerate(batches, 1):
+            exchange_tokens = {exchange_key: batch}
+
+            # Implement exponential backoff retry for this batch
+            max_retries = 3
+            base_delay = 1  # Start with 1 second
+
+            for attempt in range(max_retries + 1):
+                try:
+                    logger.info(f"Batch {batch_num}/{total_batches}: Fetching {len(batch)} tokens (attempt {attempt + 1}/{max_retries + 1})")
+
+                    response = self.smart_api.getMarketData("FULL", exchange_tokens)
+
+                    if response and response.get('status') and response.get('data'):
+                        fetched = response['data'].get('fetched', [])
+                        unfetched = response['data'].get('unfetched', [])
+
+                        if unfetched:
+                            logger.warning(f"Batch {batch_num}: Unfetched {len(unfetched)} tokens: {unfetched}")
+
+                        # Build dict keyed by token
+                        for item in fetched:
+                            result[item['symbolToken']] = {
+                                'ltp': item.get('ltp', 0),
+                                'open': item.get('open', 0),
+                                'high': item.get('high', 0),
+                                'low': item.get('low', 0),
+                                'close': item.get('close', 0),
+                                'volume': item.get('tradeVolume', 0),
+                                'oi': item.get('opnInterest', 0),
+                                'oi_change_pct': item.get('oiUpper', 0),
+                                'last_trade_qty': item.get('lastTradeQty', 0),
+                                'total_buy_qty': item.get('totBuyQuan', 0),
+                                'total_sell_qty': item.get('totSellQuan', 0),
+                            }
+
+                        logger.info(f"Batch {batch_num}: ✓ Success ({len(fetched)} tokens fetched)")
+                        break  # Success, move to next batch
+
+                    elif response and response.get('errorcode') == 'AB1004':
+                        # Rate limit error - retry with exponential backoff
+                        if attempt < max_retries:
+                            wait_time = base_delay * (2 ** attempt)
+                            logger.warning(f"Batch {batch_num}: Rate limited (AB1004). Retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                        else:
+                            logger.error(f"Batch {batch_num}: Failed after {max_retries + 1} attempts with AB1004")
+                    else:
+                        # Other error
+                        logger.error(f"Batch {batch_num}: Failed with error {response.get('errorcode')}: {response.get('message')}")
+                        break
+
+                except Exception as e:
+                    if attempt < max_retries:
+                        wait_time = base_delay * (2 ** attempt)
+                        logger.warning(f"Batch {batch_num}: Exception: {e}. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"Batch {batch_num}: Exception after {max_retries + 1} attempts: {e}")
+                        break
+
+            # Add delay between batches to respect rate limits
+            if batch_num < total_batches:
+                time.sleep(0.3)  # Small delay between batches
+
+        logger.info(f"Batch market data complete: {len(result)}/{len(tokens)} tokens fetched successfully")
+        return result
 
     def get_option_greeks(self, name: str, expiry: str):
         """
